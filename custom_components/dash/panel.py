@@ -9,11 +9,14 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def async_register_panel(hass: HomeAssistant):
-    hass.http.register_static_path(
-        f"/{DOMAIN}/frontend",
-        os.path.join(os.path.dirname(__file__), "frontend"),
-        cache_headers=False,
-    )
+    from homeassistant.components.http import StaticPathConfig
+    await hass.http.async_register_static_paths([
+        StaticPathConfig(
+            url_path=f"/{DOMAIN}/frontend",
+            path=os.path.join(os.path.dirname(__file__), "frontend"),
+            cache_headers=False,
+        )
+    ])
 
     from homeassistant.components.frontend import async_register_built_in_panel
     async_register_built_in_panel(
