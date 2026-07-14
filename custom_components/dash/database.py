@@ -44,6 +44,17 @@ def init_db(hass):
 
         CREATE INDEX IF NOT EXISTS idx_readings_trip ON readings(trip_id);
         CREATE INDEX IF NOT EXISTS idx_readings_ts   ON readings(timestamp);
+
+        CREATE TABLE IF NOT EXISTS maintenance_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            date         TEXT NOT NULL,
+            service_type TEXT NOT NULL,
+            mileage      INTEGER,
+            notes        TEXT,
+            created_at   TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_maintenance_date ON maintenance_log(date);
     """)
     conn.commit()
     conn.close()
@@ -132,6 +143,33 @@ def get_recent_trips(hass, limit: int = 20) -> list:
         LEFT JOIN readings r ON r.trip_id = t.id
         GROUP BY t.id
         ORDER BY t.start_time DESC
+        LIMIT ?
+    """, (limit,))
+    rows = [dict(r) for r in c.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_maintenance(hass, date: str, service_type: str, mileage, notes: str) -> int:
+    conn = sqlite3.connect(_path(hass))
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO maintenance_log (date, service_type, mileage, notes, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (date, service_type, mileage, notes, datetime.utcnow().isoformat()))
+    entry_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return entry_id
+
+
+def get_maintenance_log(hass, limit: int = 100) -> list:
+    conn = sqlite3.connect(_path(hass))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("""
+        SELECT * FROM maintenance_log
+        ORDER BY date DESC, id DESC
         LIMIT ?
     """, (limit,))
     rows = [dict(r) for r in c.fetchall()]

@@ -131,7 +131,17 @@
       letter-spacing: 0.8px;
     }
 
-    /* Trips */
+    /* Section headers */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      margin-top: 24px;
+    }
+
+    .section-header .section-title { margin-bottom: 0; }
+
     .section-title {
       font-size: 11px;
       font-weight: 600;
@@ -141,7 +151,21 @@
       margin-bottom: 10px;
     }
 
-    .trips-card {
+    .btn-add {
+      background: #2a2a2c;
+      color: #fff;
+      border: none;
+      border-radius: 99px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-add:hover { background: #333; }
+
+    /* Trips */
+    .trips-card, .maintenance-card {
       background: #1c1c1e;
       border-radius: 12px;
       overflow: hidden;
@@ -164,6 +188,99 @@
 
     .trip-status-active    { color: #30d158; font-size: 12px; font-weight: 600; }
     .trip-status-completed { color: #444; font-size: 12px; }
+
+    /* Maintenance log */
+    .maint-row {
+      padding: 13px 16px;
+      border-bottom: 1px solid #2a2a2c;
+      font-size: 13px;
+    }
+
+    .maint-row:last-child { border-bottom: none; }
+
+    .maint-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .maint-type { color: #fff; font-weight: 600; }
+    .maint-date { color: #555; font-size: 12px; white-space: nowrap; }
+    .maint-meta { color: #777; font-size: 12px; margin-top: 3px; }
+    .maint-notes { color: #999; font-size: 12px; margin-top: 4px; line-height: 1.4; }
+
+    .maint-empty {
+      padding: 20px 16px;
+      color: #333;
+      font-size: 13px;
+    }
+
+    /* Maintenance form */
+    .maint-form {
+      background: #1c1c1e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .maint-form.open { display: block; }
+
+    .maint-form label {
+      display: block;
+      font-size: 11px;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+
+    .maint-form label:first-child { margin-top: 0; }
+
+    .maint-form input,
+    .maint-form select,
+    .maint-form textarea {
+      width: 100%;
+      background: #111213;
+      border: 1px solid #2a2a2c;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      padding: 10px 12px;
+    }
+
+    .maint-form textarea { resize: vertical; min-height: 50px; }
+
+    .maint-form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn-save, .btn-cancel {
+      flex: 1;
+      border: none;
+      border-radius: 8px;
+      padding: 11px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-save { background: #30d158; color: #000; }
+    .btn-cancel { background: #2a2a2c; color: #ccc; }
+
+    .maint-error {
+      color: #ff453a;
+      font-size: 12px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .maint-error.show { display: block; }
 
     /* Empty state */
     .empty {
@@ -201,6 +318,13 @@
   <script>
     let token = null;
     let pollTimer = null;
+    let maintFormOpen = false;
+
+    const MAINTENANCE_TYPES = [
+      "Oil Change", "Tire Rotation", "Brake Pads", "Brake Fluid",
+      "Coolant Flush", "Spark Plugs", "Air Filter", "Cabin Air Filter",
+      "Transmission Fluid", "Battery", "Wheel Alignment", "Other",
+    ];
 
     window.addEventListener("message", (e) => {
       if (e.data?.type === "auth" && e.data.token) {
@@ -222,11 +346,12 @@
 
     async function fetchAll() {
       try {
-        const [status, trips] = await Promise.all([
+        const [status, trips, maintenance] = await Promise.all([
           get("/api/dash/status"),
           get("/api/dash/trips"),
+          get("/api/dash/maintenance"),
         ]);
-        render(status, trips);
+        render(status, trips, maintenance);
       } catch (e) {
         console.error("Dash:", e);
       }
@@ -262,6 +387,18 @@
       return d.toLocaleDateString([], { month: "short", day: "numeric" }) + `, ${time}`;
     }
 
+    function fmtPlainDate(dateStr) {
+      if (!dateStr) return "—";
+      const d = new Date(dateStr + "T00:00:00");
+      return d.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    }
+
+    function esc(str) {
+      const div = document.createElement("div");
+      div.textContent = str ?? "";
+      return div.innerHTML;
+    }
+
     function tileHtml(value, label, suffix = "") {
       const display = value != null ? `${value}${suffix}` : "—";
       const dim = value == null ? " dim" : "";
@@ -272,7 +409,96 @@
         </div>`;
     }
 
-    function render(status, trips) {
+    function maintFormHtml() {
+      const today = new Date().toISOString().slice(0, 10);
+      const optionsHtml = MAINTENANCE_TYPES.map(t => `<option value="${t}">${t}</option>`).join("");
+      return `
+        <div class="maint-form${maintFormOpen ? " open" : ""}" id="maint-form">
+          <label for="maint-date">Date</label>
+          <input type="date" id="maint-date" value="${today}">
+
+          <label for="maint-type">Service</label>
+          <select id="maint-type">${optionsHtml}</select>
+
+          <label for="maint-mileage">Mileage (optional)</label>
+          <input type="number" id="maint-mileage" placeholder="e.g. 118500">
+
+          <label for="maint-notes">Notes (optional)</label>
+          <textarea id="maint-notes" placeholder="Any details worth remembering"></textarea>
+
+          <div class="maint-error" id="maint-error">Date and service type are required.</div>
+
+          <div class="maint-form-actions">
+            <button class="btn-cancel" onclick="closeMaintForm()">Cancel</button>
+            <button class="btn-save" onclick="submitMaintenance()">Save</button>
+          </div>
+        </div>`;
+    }
+
+    function maintListHtml(entries) {
+      if (!entries || entries.length === 0) {
+        return `<div class="maintenance-card"><div class="maint-empty">No maintenance logged yet</div></div>`;
+      }
+      const rows = entries.map(m => `
+        <div class="maint-row">
+          <div class="maint-top">
+            <span class="maint-type">${esc(m.service_type)}</span>
+            <span class="maint-date">${fmtPlainDate(m.date)}</span>
+          </div>
+          ${m.mileage != null ? `<div class="maint-meta">${Number(m.mileage).toLocaleString()} mi</div>` : ""}
+          ${m.notes ? `<div class="maint-notes">${esc(m.notes)}</div>` : ""}
+        </div>`).join("");
+      return `<div class="maintenance-card">${rows}</div>`;
+    }
+
+    function toggleMaintForm() {
+      maintFormOpen = !maintFormOpen;
+      document.getElementById("maint-form").classList.toggle("open", maintFormOpen);
+    }
+
+    function closeMaintForm() {
+      maintFormOpen = false;
+      document.getElementById("maint-form").classList.remove("open");
+    }
+
+    async function submitMaintenance() {
+      const date = document.getElementById("maint-date").value;
+      const service_type = document.getElementById("maint-type").value;
+      const mileageRaw = document.getElementById("maint-mileage").value;
+      const notes = document.getElementById("maint-notes").value;
+      const errorEl = document.getElementById("maint-error");
+
+      if (!date || !service_type) {
+        errorEl.classList.add("show");
+        return;
+      }
+      errorEl.classList.remove("show");
+
+      try {
+        const res = await fetch("/api/dash/maintenance", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            date,
+            service_type,
+            mileage: mileageRaw === "" ? null : Number(mileageRaw),
+            notes: notes === "" ? null : notes,
+          }),
+        });
+        if (!res.ok) throw new Error(`maintenance post ${res.status}`);
+        maintFormOpen = false;
+        fetchAll();
+      } catch (e) {
+        console.error("Dash:", e);
+        errorEl.textContent = "Couldn't save — try again.";
+        errorEl.classList.add("show");
+      }
+    }
+
+    function render(status, trips, maintenance) {
       const hasData = status && status.timestamp;
       const dot = document.getElementById("dot");
       const lu  = document.getElementById("last-update");
@@ -280,56 +506,66 @@
       dot.className = "dot" + (hasData ? " live" : "");
       lu.textContent = hasData ? `Updated ${fmtDate(status.timestamp)}` : "No data yet";
 
+      let topHtml;
       if (!hasData) {
-        document.getElementById("main").innerHTML = `
+        topHtml = `
           <div class="empty">
             <div class="empty-icon">🚗</div>
             <h2>No vehicle data yet</h2>
             <p>Connect your OBD2 dongle, open Torque Pro,<br>and start driving. Data will appear automatically.</p>
           </div>`;
-        return;
+      } else {
+        const score = status.health_score ?? 100;
+        const cls   = colorClass(score);
+        const breakdown = Object.values(status.breakdown ?? {});
+
+        const pillsHtml = breakdown.length === 0
+          ? `<span class="pill pill-ok">All systems normal</span>`
+          : breakdown.map(b =>
+              `<span class="pill pill-${b.level}">${b.label}: ${b.value}</span>`
+            ).join("");
+
+        const tripsHtml = trips.length === 0
+          ? `<div class="trip-row"><span class="trip-date" style="color:#333">No trips recorded yet</span></div>`
+          : trips.map(t => `
+              <div class="trip-row">
+                <span class="trip-date">${fmtDate(t.start_time)}</span>
+                <span class="trip-duration">${fmtDuration(t.duration_s) ?? "—"}</span>
+                <span class="${t.status === "active" ? "trip-status-active" : "trip-status-completed"}">
+                  ${t.status === "active" ? "● Active" : "✓"}
+                </span>
+              </div>`
+            ).join("");
+
+        topHtml = `
+          <div class="score-card ${cls}">
+            <div class="score-number ${cls}">${score}</div>
+            <div class="score-label">Engine Health</div>
+            <div class="breakdown">${pillsHtml}</div>
+          </div>
+
+          <div class="readings-grid">
+            ${tileHtml(fmt(status.rpm),          "RPM")}
+            ${tileHtml(fmt(status.coolant_temp), "Coolant", status.coolant_temp != null ? "°C" : "")}
+            ${tileHtml(fmt(status.voltage, 1),   "Voltage", status.voltage     != null ? "V"  : "")}
+            ${tileHtml(fmt(status.fuel_level),   "Fuel",    status.fuel_level  != null ? "%"  : "")}
+            ${tileHtml(fmt(status.speed),        "Speed")}
+            ${tileHtml(fmt(status.engine_load),  "Load",    status.engine_load != null ? "%"  : "")}
+          </div>
+
+          <div class="section-title">Recent Trips</div>
+          <div class="trips-card">${tripsHtml}</div>`;
       }
 
-      const score = status.health_score ?? 100;
-      const cls   = colorClass(score);
-      const breakdown = Object.values(status.breakdown ?? {});
-
-      const pillsHtml = breakdown.length === 0
-        ? `<span class="pill pill-ok">All systems normal</span>`
-        : breakdown.map(b =>
-            `<span class="pill pill-${b.level}">${b.label}: ${b.value}</span>`
-          ).join("");
-
-      const tripsHtml = trips.length === 0
-        ? `<div class="trip-row"><span class="trip-date" style="color:#333">No trips recorded yet</span></div>`
-        : trips.map(t => `
-            <div class="trip-row">
-              <span class="trip-date">${fmtDate(t.start_time)}</span>
-              <span class="trip-duration">${fmtDuration(t.duration_s) ?? "—"}</span>
-              <span class="${t.status === "active" ? "trip-status-active" : "trip-status-completed"}">
-                ${t.status === "active" ? "● Active" : "✓"}
-              </span>
-            </div>`
-          ).join("");
-
       document.getElementById("main").innerHTML = `
-        <div class="score-card ${cls}">
-          <div class="score-number ${cls}">${score}</div>
-          <div class="score-label">Engine Health</div>
-          <div class="breakdown">${pillsHtml}</div>
-        </div>
+        ${topHtml}
 
-        <div class="readings-grid">
-          ${tileHtml(fmt(status.rpm),          "RPM")}
-          ${tileHtml(fmt(status.coolant_temp), "Coolant", status.coolant_temp != null ? "°C" : "")}
-          ${tileHtml(fmt(status.voltage, 1),   "Voltage", status.voltage     != null ? "V"  : "")}
-          ${tileHtml(fmt(status.fuel_level),   "Fuel",    status.fuel_level  != null ? "%"  : "")}
-          ${tileHtml(fmt(status.speed),        "Speed")}
-          ${tileHtml(fmt(status.engine_load),  "Load",    status.engine_load != null ? "%"  : "")}
+        <div class="section-header">
+          <div class="section-title">Maintenance Log</div>
+          <button class="btn-add" onclick="toggleMaintForm()">+ Log Service</button>
         </div>
-
-        <div class="section-title">Recent Trips</div>
-        <div class="trips-card">${tripsHtml}</div>
+        ${maintFormHtml()}
+        ${maintListHtml(maintenance)}
       `;
     }
   </script>

@@ -23,10 +23,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     await hass.async_add_executor_job(init_db, hass)
 
-    from .api import DashIngestView, DashStatusView, DashTripsView
+    from .api import DashIngestView, DashMaintenanceView, DashStatusView, DashTripsView
     hass.http.register_view(DashIngestView)
     hass.http.register_view(DashStatusView)
     hass.http.register_view(DashTripsView)
+    hass.http.register_view(DashMaintenanceView)
 
     await async_register_panel(hass)
 

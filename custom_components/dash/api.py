@@ -5,7 +5,14 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 
 from .const import DOMAIN, TRIP_GAP_SECONDS
-from .database import end_trip, get_recent_trips, save_reading, start_trip
+from .database import (
+    add_maintenance,
+    end_trip,
+    get_maintenance_log,
+    get_recent_trips,
+    save_reading,
+    start_trip,
+)
 from .health import calculate_health_score
 
 _LOGGER = logging.getLogger(__name__)
@@ -116,3 +123,36 @@ class DashTripsView(HomeAssistantView):
         hass = request.app["hass"]
         trips = await hass.async_add_executor_job(get_recent_trips, hass)
         return self.json(trips)
+
+
+class DashMaintenanceView(HomeAssistantView):
+    url = "/api/dash/maintenance"
+    name = "api:dash:maintenance"
+    requires_auth = True
+
+    async def get(self, request):
+        hass = request.app["hass"]
+        entries = await hass.async_add_executor_job(get_maintenance_log, hass)
+        return self.json(entries)
+
+    async def post(self, request):
+        hass = request.app["hass"]
+        data = await request.json()
+
+        service_type = (data.get("service_type") or "").strip()
+        date = (data.get("date") or "").strip()
+        if not service_type or not date:
+            return web.Response(status=400, text="service_type and date are required")
+
+        mileage = data.get("mileage")
+        try:
+            mileage = int(mileage) if mileage not in (None, "") else None
+        except (TypeError, ValueError):
+            mileage = None
+
+        notes = (data.get("notes") or "").strip() or None
+
+        entry_id = await hass.async_add_executor_job(
+            add_maintenance, hass, date, service_type, mileage, notes
+        )
+        return self.json({"id": entry_id})
