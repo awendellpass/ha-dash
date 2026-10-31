@@ -101,6 +101,9 @@ def _parse(params: dict, key_names: dict, unknown: dict) -> dict:
             # Remember unmapped PID keys so new/custom ones are discoverable
             # via /api/dash/status instead of silently dropped.
             if k.startswith("k") and k not in _IGNORED_KEYS:
+                if k not in unknown:
+                    _LOGGER.warning("Dash: unmapped Torque field %s (%s) = %s",
+                                    k, key_names.get(k), raw)
                 unknown[k] = {"name": key_names.get(k), "value": raw}
             continue
         try:

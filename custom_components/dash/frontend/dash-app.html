@@ -569,7 +569,24 @@
         </div>
         ${maintFormHtml()}
         ${maintListHtml(maintenance)}
+        ${unknownKeysHtml(status && status.unknown_keys)}
       `;
+    }
+
+    // Torque fields Dash received but doesn't map yet — shown so new/custom
+    // PIDs can be identified and added without digging through logs.
+    function unknownKeysHtml(unknown) {
+      const entries = Object.entries(unknown ?? {});
+      if (entries.length === 0) return "";
+      return `
+        <div class="section-title">Unmapped Torque Fields</div>
+        <div class="trips-card">
+          ${entries.map(([key, u]) => `
+            <div class="trip-row">
+              <span class="trip-date">${esc(key)}${u.name ? ` — ${esc(u.name)}` : ""}</span>
+              <span class="trip-duration">${esc(String(u.value))}</span>
+            </div>`).join("")}
+        </div>`;
     }
   </script>
 </body>
