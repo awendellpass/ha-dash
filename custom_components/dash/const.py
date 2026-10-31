@@ -15,3 +15,6 @@ VOLTAGE_HIGH_V = 15.0
 # Fuel level thresholds (%)
 FUEL_LOW_PCT = 15
 FUEL_CRITICAL_PCT = 5
+
+# 2014 Corolla tank: 13.2 gal. Converts Toyota's liters reading to %.
+FUEL_TANK_L = 50.0

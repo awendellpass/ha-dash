@@ -551,6 +551,9 @@
             ${tileHtml(fmt(status.fuel_level),   "Fuel",    status.fuel_level  != null ? "%"  : "")}
             ${tileHtml(fmt(status.speed),        "Speed")}
             ${tileHtml(fmt(status.engine_load),  "Load",    status.engine_load != null ? "%"  : "")}
+            ${tileHtml(fmt(status.odometer),     "Odometer")}
+            ${tileHtml(fmt(status.oil_temp),     "Oil",     status.oil_temp    != null ? "°C" : "")}
+            ${tileHtml(fmt(status.intake_temp),  "Intake",  status.intake_temp != null ? "°C" : "")}
           </div>
 
           <div class="section-title">Recent Trips</div>

@@ -56,8 +56,27 @@ def init_db(hass):
 
         CREATE INDEX IF NOT EXISTS idx_maintenance_date ON maintenance_log(date);
     """)
+
+    # Columns added after v1 — ALTER existing databases in place
+    _add_columns(conn, "readings", {
+        "odometer": "REAL",  # Toyota PID 21 28; units (km vs mi) still to confirm
+        "fuel_l":   "REAL",
+        "oil_temp": "REAL",
+    })
+    _add_columns(conn, "trips", {
+        "start_odometer": "REAL",
+        "end_odometer":   "REAL",
+        "max_oil_temp":   "REAL",
+    })
     conn.commit()
     conn.close()
+
+
+def _add_columns(conn, table: str, columns: dict):
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for name, col_type in columns.items():
+        if name not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {col_type}")
 
 
 def start_trip(hass) -> int:
@@ -75,10 +94,12 @@ def end_trip(hass, trip_id: int):
     c = conn.cursor()
 
     c.execute("""
-        SELECT AVG(coolant_temp), AVG(voltage), MIN(fuel_level), MAX(rpm)
+        SELECT AVG(coolant_temp), AVG(voltage), MIN(fuel_level), MAX(rpm),
+               MIN(odometer), MAX(odometer), MAX(oil_temp)
         FROM readings WHERE trip_id = ?
     """, (trip_id,))
-    avg_coolant, avg_voltage, min_fuel, max_rpm = c.fetchone()
+    (avg_coolant, avg_voltage, min_fuel, max_rpm,
+     start_odometer, end_odometer, max_oil_temp) = c.fetchone()
 
     c.execute("SELECT start_time FROM trips WHERE id = ?", (trip_id,))
     row = c.fetchone()
@@ -95,11 +116,15 @@ def end_trip(hass, trip_id: int):
             avg_coolant = ?,
             avg_voltage = ?,
             min_fuel    = ?,
-            max_rpm     = ?
+            max_rpm     = ?,
+            start_odometer = ?,
+            end_odometer   = ?,
+            max_oil_temp   = ?
         WHERE id = ?
     """, (
         datetime.utcnow().isoformat(),
         duration, avg_coolant, avg_voltage, min_fuel, max_rpm,
+        start_odometer, end_odometer, max_oil_temp,
         trip_id,
     ))
     conn.commit()
@@ -112,8 +137,9 @@ def save_reading(hass, reading: dict, trip_id: int, health_score: int, breakdown
         INSERT INTO readings (
             trip_id, timestamp, rpm, coolant_temp, speed, throttle_pos,
             engine_load, voltage, fuel_level, intake_temp, stft1,
+            odometer, fuel_l, oil_temp,
             health_score, breakdown
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         trip_id,
         datetime.utcnow().isoformat(),
@@ -126,6 +152,9 @@ def save_reading(hass, reading: dict, trip_id: int, health_score: int, breakdown
         reading.get("fuel_level"),
         reading.get("intake_temp"),
         reading.get("stft1"),
+        reading.get("odometer"),
+        reading.get("fuel_l"),
+        reading.get("oil_temp"),
         health_score,
         json.dumps(breakdown),
     ))

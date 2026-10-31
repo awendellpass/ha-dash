@@ -19,6 +19,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         "current_trip_id": None,
         "last_reading_time": None,
         "latest_reading": {},
+        "key_names": {},     # Torque PID key → name, learned from uploads
+        "unknown_keys": {},  # PID keys seen but not mapped (for discovery)
     }
 
     await hass.async_add_executor_job(init_db, hass)
